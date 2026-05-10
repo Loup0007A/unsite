@@ -1,0 +1,155 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# RENDER BLUEPRINT — render.yaml
+#
+# Ce fichier configure automatiquement tous les services Render.
+# Commitez-le à la racine de votre repo, puis sur Render :
+# Dashboard → New → Blueprint → sélectionnez votre repo.
+#
+# Docs : https://render.com/docs/blueprint-spec
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Service web principal ──────────────────────────────────────────────────
+  - type: web
+    name: unsite
+    runtime: node
+    region: frankfurt          # EU pour la latence FR
+    plan: starter              # $7/mois — passe à "standard" pour 0-downtime deploys
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: NEXT_PUBLIC_SITE_URL
+        fromService:
+          type: web
+          name: unsite
+          property: host          # Render injecte automatiquement l'URL publique
+      - key: CRON_SECRET
+        generateValue: true       # Render génère une valeur sécurisée automatiquement
+
+    # Auto-deploy à chaque push sur main
+    autoDeploy: true
+
+  # ── Cron jobs ──────────────────────────────────────────────────────────────
+  # Note : Render Cron Jobs sont des services séparés qui font des requêtes HTTP.
+  # Ils appellent votre endpoint /api/cron avec le header Authorization.
+
+  - type: cron
+    name: unsite-cron-heartbeat
+    runtime: node
+    region: frankfurt
+    plan: starter
+    schedule: "* * * * *"         # Chaque minute
+    buildCommand: echo "cron-heartbeat"
+    startCommand: >
+      curl -s -o /dev/null -w "%{http_code}"
+      -H "Authorization: Bearer $CRON_SECRET"
+      "$SITE_URL/api/cron?job=heartbeat"
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: unsite
+          envVarKey: CRON_SECRET
+      - key: SITE_URL
+        fromService:
+          type: web
+          name: unsite
+          property: host
+
+  - type: cron
+    name: unsite-cron-cleanup
+    runtime: node
+    region: frankfurt
+    plan: starter
+    schedule: "*/5 * * * *"       # Toutes les 5 minutes
+    buildCommand: echo "cron-cleanup"
+    startCommand: >
+      curl -s -f
+      -H "Authorization: Bearer $CRON_SECRET"
+      "$SITE_URL/api/cron?job=cleanup"
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: unsite
+          envVarKey: CRON_SECRET
+      - key: SITE_URL
+        fromService:
+          type: web
+          name: unsite
+          property: host
+
+  - type: cron
+    name: unsite-cron-mood
+    runtime: node
+    region: frankfurt
+    plan: starter
+    schedule: "*/15 * * * *"      # Toutes les 15 minutes
+    buildCommand: echo "cron-mood"
+    startCommand: >
+      curl -s -f
+      -H "Authorization: Bearer $CRON_SECRET"
+      "$SITE_URL/api/cron?job=mood"
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: unsite
+          envVarKey: CRON_SECRET
+      - key: SITE_URL
+        fromService:
+          type: web
+          name: unsite
+          property: host
+
+  - type: cron
+    name: unsite-cron-stats
+    runtime: node
+    region: frankfurt
+    plan: starter
+    schedule: "0 * * * *"         # Chaque heure
+    buildCommand: echo "cron-stats"
+    startCommand: >
+      curl -s -f
+      -H "Authorization: Bearer $CRON_SECRET"
+      "$SITE_URL/api/cron?job=stats"
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: unsite
+          envVarKey: CRON_SECRET
+      - key: SITE_URL
+        fromService:
+          type: web
+          name: unsite
+          property: host
+
+  - type: cron
+    name: unsite-cron-prune
+    runtime: node
+    region: frankfurt
+    plan: starter
+    schedule: "0 0 * * *"         # Chaque nuit à minuit
+    buildCommand: echo "cron-prune"
+    startCommand: >
+      curl -s -f
+      -H "Authorization: Bearer $CRON_SECRET"
+      "$SITE_URL/api/cron?job=prune-drawings"
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: unsite
+          envVarKey: CRON_SECRET
+      - key: SITE_URL
+        fromService:
+          type: web
+          name: unsite
+          property: host
